@@ -1,1 +1,36 @@
 HireFlow_PRD.md
+
+# --- Environment & Configuration ---
+.env
+*.env
+
+# --- Python Virtual Environments ---
+.venv/
+env/
+venv/
+ENV/
+
+# --- Python Cache & Temporary Files ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# --- IDEs & Editors ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Database (SQLite / Local DBs) ---
+*.db
+*.sqlite3
+
+# --- OS Specific ---
+.DS_Store
+Thumbs.db
