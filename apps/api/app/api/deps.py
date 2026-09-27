@@ -46,3 +46,21 @@ def get_current_user(
     if user is None or not user.is_active:
         raise _credentials_error()
     return user
+
+
+def get_verified_user(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Authenticated user with a verified email.
+
+    Per the PRD, unverified users must not access protected organization
+    resources. Authentication (401) stays in ``get_current_user``; this layer
+    reports the verified-email gate as 403 since the caller is authenticated
+    but not authorized for protected resources yet.
+    """
+    if not current_user.is_email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email verification required",
+        )
+    return current_user

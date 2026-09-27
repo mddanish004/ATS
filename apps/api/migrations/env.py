@@ -5,7 +5,15 @@ from sqlalchemy import engine_from_config, pool
 from sqlmodel import SQLModel
 
 from app.core.config import settings
-from app.models import Invitation, Membership, Organization, User
+from app.models import (
+    EmailVerificationToken,
+    Invitation,
+    Membership,
+    Organization,
+    PasswordResetToken,
+    RefreshToken,
+    User,
+)
 
 config = context.config
 
@@ -13,7 +21,15 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Importing the models registers their tables with SQLModel.metadata.
-_ = (Invitation, Membership, Organization, User)
+_ = (
+    EmailVerificationToken,
+    Invitation,
+    Membership,
+    Organization,
+    PasswordResetToken,
+    RefreshToken,
+    User,
+)
 
 target_metadata = SQLModel.metadata
 

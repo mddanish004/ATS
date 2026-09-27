@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 
-from app.api.deps import get_current_user
+from app.api.deps import get_verified_user
 from app.db.database import get_session
 from app.models import Membership, MembershipRole, Organization, User
 from app.schemas import (
@@ -20,7 +20,10 @@ router = APIRouter(
     responses={
         status.HTTP_401_UNAUTHORIZED: {
             "description": "Missing, malformed, or expired access token",
-        }
+        },
+        status.HTTP_403_FORBIDDEN: {
+            "description": "Email verification required",
+        },
     },
 )
 
@@ -33,7 +36,7 @@ router = APIRouter(
 def create_organization(
     payload: OrganizationCreate,
     session: Annotated[Session, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_verified_user)],
 ) -> Organization:
     organization = Organization(
         name=payload.name,
@@ -63,7 +66,7 @@ def create_organization(
 def get_organization(
     organization_id: UUID,
     session: Annotated[Session, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_verified_user)],
 ) -> Organization:
     organization = session.get(Organization, organization_id)
     if organization is None:
@@ -82,7 +85,7 @@ def get_organization(
 def list_memberships(
     organization_id: UUID,
     session: Annotated[Session, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_verified_user)],
 ) -> list[MembershipRead]:
     organization = session.get(Organization, organization_id)
     if organization is None:

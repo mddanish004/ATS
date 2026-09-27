@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30
+    email_verification_token_expire_hours: int = 24
+    password_reset_token_expire_hours: int = 1
 
     model_config = SettingsConfigDict(
         env_file=".env",
