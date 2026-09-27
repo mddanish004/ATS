@@ -15,7 +15,7 @@ import pytest
 from sqlmodel import select
 
 from app.core.config import settings
-from app.models import Membership, User
+from app.models import Membership, MembershipRole, User
 
 GENERIC_401 = {"detail": "Could not validate credentials"}
 
@@ -46,7 +46,16 @@ def test_missing_token_rejected_with_authenticate_header(client, organization):
     assert response.headers.get("www-authenticate") == "Bearer"
 
 
-def test_valid_token_succeeds(client, organization, auth_headers):
+def test_valid_token_succeeds(client, session, organization, user, auth_headers):
+    session.add(
+        Membership(
+            organization_id=organization.id,
+            user_id=user.id,
+            role=MembershipRole.ADMIN,
+        )
+    )
+    session.commit()
+
     response = client.get(
         f"/api/v1/organizations/{organization.id}", headers=auth_headers
     )
@@ -169,8 +178,17 @@ def test_client_identity_cannot_override_authenticated_user(
 
 
 def test_protected_responses_expose_no_credential_hashes(
-    client, organization, auth_headers
+    client, session, organization, user, auth_headers
 ):
+    session.add(
+        Membership(
+            organization_id=organization.id,
+            user_id=user.id,
+            role=MembershipRole.ADMIN,
+        )
+    )
+    session.commit()
+
     response = client.get(
         f"/api/v1/organizations/{organization.id}/memberships",
         headers=auth_headers,

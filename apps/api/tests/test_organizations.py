@@ -108,7 +108,18 @@ def test_create_organization_validates_payload(client, auth_headers, payload):
     assert response.json()["detail"]
 
 
-def test_get_organization_returns_organization(client, organization, auth_headers):
+def test_get_organization_returns_organization(
+    client, session, organization, user, auth_headers
+):
+    session.add(
+        Membership(
+            organization_id=organization.id,
+            user_id=user.id,
+            role=MembershipRole.ADMIN,
+        )
+    )
+    session.commit()
+
     response = client.get(
         f"/api/v1/organizations/{organization.id}",
         headers=auth_headers,
@@ -200,18 +211,31 @@ def test_list_memberships_returns_members_with_user_details(
     assert recruiter["created_at"]
 
 
-def test_list_memberships_returns_empty_list_without_members(
+def test_list_memberships_returns_only_requester_when_sole_member(
     client,
+    session,
     organization,
+    user,
     auth_headers,
 ):
+    session.add(
+        Membership(
+            organization_id=organization.id,
+            user_id=user.id,
+            role=MembershipRole.ADMIN,
+        )
+    )
+    session.commit()
+
     response = client.get(
         f"/api/v1/organizations/{organization.id}/memberships",
         headers=auth_headers,
     )
 
     assert response.status_code == 200
-    assert response.json() == []
+    members = response.json()
+    assert len(members) == 1
+    assert UUID(members[0]["user_id"]) == user.id
 
 
 def test_list_memberships_returns_404_for_unknown_organization(

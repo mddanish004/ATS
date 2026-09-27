@@ -1,11 +1,17 @@
 from typing import Annotated
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import Session, select
+from fastapi import APIRouter, Depends, status
+from sqlmodel import Session
 
-from app.api.deps import get_verified_user
+from app.api.deps import (
+    OrganizationContext,
+    get_organization_context,
+    get_verified_user,
+    require_permission,
+)
+from app.core.permissions import Permission
 from app.db.database import get_session
+from app.db.tenant import scoped_select
 from app.models import Membership, MembershipRole, Organization, User
 from app.schemas import (
     MembershipRead,
@@ -22,7 +28,7 @@ router = APIRouter(
             "description": "Missing, malformed, or expired access token",
         },
         status.HTTP_403_FORBIDDEN: {
-            "description": "Email verification required",
+            "description": "Email verification required or insufficient permissions",
         },
     },
 )
@@ -64,17 +70,11 @@ def create_organization(
     responses={status.HTTP_404_NOT_FOUND: {"description": "Organization not found"}},
 )
 def get_organization(
-    organization_id: UUID,
-    session: Annotated[Session, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_verified_user)],
+    ctx: Annotated[OrganizationContext, Depends(get_organization_context)],
 ) -> Organization:
-    organization = session.get(Organization, organization_id)
-    if organization is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Organization not found",
-        )
-    return organization
+    # Membership already verified by the context dependency; the tenant root
+    # itself needs no further permission check to be viewed by its members.
+    return ctx.organization
 
 
 @router.get(
@@ -83,21 +83,16 @@ def get_organization(
     responses={status.HTTP_404_NOT_FOUND: {"description": "Organization not found"}},
 )
 def list_memberships(
-    organization_id: UUID,
+    ctx: Annotated[
+        OrganizationContext, Depends(require_permission(Permission.USERS_MANAGE))
+    ],
     session: Annotated[Session, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_verified_user)],
 ) -> list[MembershipRead]:
-    organization = session.get(Organization, organization_id)
-    if organization is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Organization not found",
-        )
-
+    # Tenant scope comes from the resolved membership context, not the raw
+    # client-supplied path ID: id + organization_id are bound together.
     rows = session.exec(
-        select(Membership, User)
+        scoped_select(Membership, ctx.organization.id, User)
         .join(User, Membership.user_id == User.id)
-        .where(Membership.organization_id == organization_id)
         .order_by(Membership.created_at, Membership.id)
     ).all()
     return [
