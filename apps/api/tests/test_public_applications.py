@@ -15,7 +15,10 @@ from app.models import (
     JobStatus,
     Organization,
     ResumeDocument,
+    ResumeProcessingStatus,
 )
+from app.services.malware_scanner import MalwareScanResult, get_malware_scanner
+from app.services.resume_queue import ResumeQueueError, get_resume_processing_queue
 from app.services.storage_service import StorageError, get_private_storage
 
 PDF = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n"
@@ -78,7 +81,7 @@ def _apply(client, organization_slug: str, job_slug: str, payload=None, file=Non
 
 
 def test_unauthenticated_application_creates_tenant_scoped_records(
-    client, session, private_storage
+    client, session, private_storage, resume_processing_queue
 ):
     organization = _organization(session, "Acme", "acme")
     job = _job(session, organization, "backend-engineer", JobStatus.PUBLISHED)
@@ -99,10 +102,18 @@ def test_unauthenticated_application_creates_tenant_scoped_records(
     assert resume.organization_id == organization.id
     assert resume.candidate_id == candidate.id
     assert resume.application_id == application.id
+    assert resume.status == ResumeProcessingStatus.QUEUED
     assert resume.storage_key.startswith(
         f"org/{organization.id}/candidates/{candidate.id}/resumes/"
     )
     assert (private_storage.root / resume.storage_key).read_bytes() == PDF
+    assert resume_processing_queue.jobs == [
+        (
+            organization.id,
+            resume.id,
+            f"resume-processing:{organization.id}:{resume.id}",
+        )
+    ]
     assert "storage_key" not in response.json()
     assert "url" not in response.json()
 
@@ -234,11 +245,24 @@ def test_wrong_organization_slug_cannot_submit_to_job(client, session):
 
 def test_storage_failure_rolls_back_candidate_and_application(client, session):
     class FailingStorage:
-        def put(self, key: str, data: bytes) -> None:
+        def upload_object(
+            self,
+            key: str,
+            data: bytes,
+            *,
+            content_type: str,
+            metadata: dict[str, str] | None = None,
+        ) -> None:
+            raise StorageError("unavailable")
+
+        def download_object(self, key: str) -> bytes:
             raise StorageError("unavailable")
 
         def delete(self, key: str) -> None:
             pass
+
+        def generate_signed_url(self, key: str, *, expires_in: int) -> str:
+            raise StorageError("unavailable")
 
     organization = _organization(session, "Acme", "acme")
     _job(session, organization, "engineer", JobStatus.PUBLISHED)
@@ -247,6 +271,67 @@ def test_storage_failure_rolls_back_candidate_and_application(client, session):
     response = _apply(client, "acme", "engineer")
 
     assert response.status_code == 503
+    assert session.exec(select(Candidate)).all() == []
+    assert session.exec(select(Application)).all() == []
+    assert session.exec(select(ResumeDocument)).all() == []
+
+
+def test_queue_failure_preserves_queued_resume_for_recovery(client, session):
+    class FailingQueue:
+        async def enqueue_resume_processing(
+            self,
+            *,
+            organization_id,
+            resume_document_id,
+        ) -> str:
+            raise ResumeQueueError("redis unavailable")
+
+    organization = _organization(session, "Acme", "acme")
+    _job(session, organization, "engineer", JobStatus.PUBLISHED)
+    app.dependency_overrides[get_resume_processing_queue] = lambda: FailingQueue()
+
+    response = _apply(client, "acme", "engineer")
+
+    assert response.status_code == 503
+    assert len(session.exec(select(Candidate)).all()) == 1
+    assert len(session.exec(select(Application)).all()) == 1
+    resume = session.exec(select(ResumeDocument)).one()
+    assert resume.status == ResumeProcessingStatus.QUEUED
+    assert resume.error_message == "redis unavailable"
+
+
+def test_malware_scanner_is_invoked(client, session):
+    class RecordingScanner:
+        def __init__(self):
+            self.calls = []
+
+        def scan(self, *, filename: str, content_type: str, data: bytes):
+            self.calls.append((filename, content_type, data))
+            return MalwareScanResult(clean=True)
+
+    scanner = RecordingScanner()
+    organization = _organization(session, "Acme", "acme")
+    _job(session, organization, "engineer", JobStatus.PUBLISHED)
+    app.dependency_overrides[get_malware_scanner] = lambda: scanner
+
+    response = _apply(client, "acme", "engineer")
+
+    assert response.status_code == 201
+    assert scanner.calls == [("resume.pdf", "application/pdf", PDF)]
+
+
+def test_malware_scanner_rejection_blocks_application(client, session):
+    class RejectingScanner:
+        def scan(self, *, filename: str, content_type: str, data: bytes):
+            return MalwareScanResult(clean=False, reason="blocked")
+
+    organization = _organization(session, "Acme", "acme")
+    _job(session, organization, "engineer", JobStatus.PUBLISHED)
+    app.dependency_overrides[get_malware_scanner] = lambda: RejectingScanner()
+
+    response = _apply(client, "acme", "engineer")
+
+    assert response.status_code == 422
     assert session.exec(select(Candidate)).all() == []
     assert session.exec(select(Application)).all() == []
     assert session.exec(select(ResumeDocument)).all() == []

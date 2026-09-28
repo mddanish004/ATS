@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "alembic>=1.19.1",
+    "arq>=0.26.3",
+    "boto3>=1.40.0",
     "email-validator>=2.3.0",
     "fastapi>=0.141.1",
     "psycopg[binary]>=3.3.5",
@@ -20,6 +22,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "httpx2>=2.13.1",
+    "mypy>=2.3.1",
     "pytest>=9.1.1",
     "ruff>=0.16.9",
 ]
@@ -27,3 +30,29 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.mypy]
+python_version = "3.14"
+mypy_path = ["."]
+explicit_package_bases = true
+ignore_missing_imports = true
+warn_unused_ignores = false
+warn_redundant_casts = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = ["app.models.*", "app.schemas.*"]
+disable_error_code = ["assignment", "call-overload"]
+
+[[tool.mypy.overrides]]
+module = [
+    "app.api.v1.jobs",
+    "app.api.v1.organizations",
+    "app.api.v1.public_careers",
+    "app.db.tenant",
+]
+disable_error_code = ["arg-type", "attr-defined", "call-overload", "union-attr"]
+
+[[tool.mypy.overrides]]
+module = ["app.core.config"]
+disable_error_code = ["call-arg"]

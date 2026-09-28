@@ -34,6 +34,22 @@ from app.schemas import (
     PublicApplicationCreate,
     PublicJobRead,
 )
+from app.services.malware_scanner import (
+    MalwareScanError,
+    MalwareScanner,
+    get_malware_scanner,
+)
+from app.services.resume_processing import (
+    mark_resume_queued,
+    record_resume_queue_failure,
+)
+from app.services.resume_queue import (
+    ResumeProcessingQueue,
+    ResumeQueueError,
+    get_resume_processing_queue,
+)
+from app.services.resume_service import resume_storage_key
+from app.services.resume_validation import validate_resume_upload
 from app.services.storage_service import (
     PrivateStorage,
     StorageError,
@@ -132,32 +148,6 @@ def _application_payload(raw_payload: str) -> PublicApplicationCreate:
         raise RequestValidationError(exc.errors()) from exc
 
 
-async def _validated_pdf(resume: UploadFile) -> bytes:
-    filename = resume.filename or ""
-    if not filename.lower().endswith(".pdf"):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Resume must use the .pdf extension",
-        )
-    if resume.content_type != "application/pdf":
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Resume must have the application/pdf content type",
-        )
-    content = await resume.read(settings.max_resume_size_bytes + 1)
-    if len(content) > settings.max_resume_size_bytes:
-        raise HTTPException(
-            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail="Resume exceeds the configured maximum file size",
-        )
-    if not content.startswith(b"%PDF-") or b"%%EOF" not in content[-1024:]:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Resume content is not a valid PDF",
-        )
-    return content
-
-
 @router.post(
     "/{job_slug}/apply",
     response_model=ApplicationSubmissionRead,
@@ -170,6 +160,11 @@ async def submit_public_application(
     resume: Annotated[UploadFile, File()],
     session: Annotated[Session, Depends(get_session)],
     storage: Annotated[PrivateStorage, Depends(get_private_storage)],
+    malware_scanner: Annotated[MalwareScanner, Depends(get_malware_scanner)],
+    resume_queue: Annotated[
+        ResumeProcessingQueue,
+        Depends(get_resume_processing_queue),
+    ],
 ) -> ApplicationSubmissionRead:
     organization = _public_organization(session, organization_slug)
     job = session.exec(
@@ -183,7 +178,27 @@ async def submit_public_application(
         raise _not_found()
 
     application_data = _application_payload(payload)
-    resume_content = await _validated_pdf(resume)
+    validated_resume = await validate_resume_upload(
+        resume,
+        max_size_bytes=settings.max_resume_size_bytes,
+    )
+    try:
+        scan_result = malware_scanner.scan(
+            filename=validated_resume.original_filename,
+            content_type=validated_resume.content_type,
+            data=validated_resume.content,
+        )
+    except MalwareScanError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Resume could not be scanned",
+        ) from exc
+    if not scan_result.clean:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Resume failed security validation",
+        )
+
     normalized_email = str(application_data.email).strip().lower()
     candidate = session.exec(
         select(Candidate).where(
@@ -252,15 +267,15 @@ async def submit_public_application(
         organization_id=organization.id,
         candidate_id=candidate.id,
         application_id=application.id,
-        storage_key=(
-            f"org/{organization.id}/candidates/{candidate.id}/resumes/"
-            f"{resume_document_id}/original.pdf"
+        storage_key=resume_storage_key(
+            organization_id=organization.id,
+            candidate_id=candidate.id,
+            resume_id=resume_document_id,
+            extension=validated_resume.extension,
         ),
-        original_filename=(resume.filename or "resume.pdf")
-        .replace("\\", "/")
-        .rsplit("/", 1)[-1][:255],
-        content_type="application/pdf",
-        size_bytes=len(resume_content),
+        original_filename=validated_resume.original_filename,
+        content_type=validated_resume.content_type,
+        size_bytes=validated_resume.size_bytes,
     )
     session.add(application)
     session.add(resume_document)
@@ -268,7 +283,21 @@ async def submit_public_application(
     stored = False
     try:
         session.flush()
-        storage.put(resume_document.storage_key, resume_content)
+        mark_resume_queued(
+            session,
+            organization_id=organization.id,
+            resume_document_id=resume_document.id,
+        )
+        storage.upload_object(
+            resume_document.storage_key,
+            validated_resume.content,
+            content_type=validated_resume.content_type,
+            metadata={
+                "organization_id": str(organization.id),
+                "candidate_id": str(candidate.id),
+                "resume_id": str(resume_document_id),
+            },
+        )
         stored = True
         session.commit()
     except IntegrityError as exc:
@@ -286,6 +315,24 @@ async def submit_public_application(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Application could not be submitted",
+        ) from exc
+
+    try:
+        await resume_queue.enqueue_resume_processing(
+            organization_id=organization.id,
+            resume_document_id=resume_document.id,
+        )
+    except ResumeQueueError as exc:
+        record_resume_queue_failure(
+            session,
+            organization_id=organization.id,
+            resume_document_id=resume_document.id,
+            error_message=str(exc),
+        )
+        session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Application was received but resume processing could not be queued",
         ) from exc
 
     return ApplicationSubmissionRead(message="Application received")

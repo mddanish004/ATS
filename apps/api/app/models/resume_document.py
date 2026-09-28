@@ -15,6 +15,33 @@ class ResumeProcessingStatus(str, Enum):
     NEEDS_REVIEW = "needs_review"
 
 
+RESUME_PROCESSING_TRANSITIONS: dict[
+    ResumeProcessingStatus, set[ResumeProcessingStatus]
+] = {
+    ResumeProcessingStatus.UPLOADED: {ResumeProcessingStatus.QUEUED},
+    ResumeProcessingStatus.QUEUED: {
+        ResumeProcessingStatus.PROCESSING,
+        ResumeProcessingStatus.FAILED,
+    },
+    ResumeProcessingStatus.PROCESSING: {
+        ResumeProcessingStatus.PROCESSING,
+        ResumeProcessingStatus.COMPLETED,
+        ResumeProcessingStatus.FAILED,
+        ResumeProcessingStatus.NEEDS_REVIEW,
+    },
+    ResumeProcessingStatus.COMPLETED: set(),
+    ResumeProcessingStatus.FAILED: set(),
+    ResumeProcessingStatus.NEEDS_REVIEW: set(),
+}
+
+
+def can_transition_resume_processing(
+    current: ResumeProcessingStatus,
+    target: ResumeProcessingStatus,
+) -> bool:
+    return target in RESUME_PROCESSING_TRANSITIONS[current]
+
+
 class ResumeDocument(SQLModel, table=True):
     __tablename__ = "resume_documents"
 
@@ -38,5 +65,6 @@ class ResumeDocument(SQLModel, table=True):
             name="resume_processing_status",
         ),
     )
+    error_message: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

@@ -16,6 +16,7 @@ from app.core.security import create_access_token
 from app.db.database import get_session
 from app.main import app
 from app.models import Organization, User
+from app.services.resume_queue import get_resume_processing_queue
 from app.services.storage_service import LocalPrivateStorage, get_private_storage
 
 
@@ -43,9 +44,31 @@ def private_storage(tmp_path):
 
 
 @pytest.fixture()
-def client(session, private_storage) -> Generator[TestClient]:
+def resume_processing_queue():
+    class InMemoryResumeProcessingQueue:
+        def __init__(self):
+            self.jobs = []
+
+        async def enqueue_resume_processing(
+            self,
+            *,
+            organization_id,
+            resume_document_id,
+        ) -> str:
+            task_id = f"resume-processing:{organization_id}:{resume_document_id}"
+            self.jobs.append((organization_id, resume_document_id, task_id))
+            return task_id
+
+    return InMemoryResumeProcessingQueue()
+
+
+@pytest.fixture()
+def client(session, private_storage, resume_processing_queue) -> Generator[TestClient]:
     app.dependency_overrides[get_session] = lambda: session
     app.dependency_overrides[get_private_storage] = lambda: private_storage
+    app.dependency_overrides[get_resume_processing_queue] = (
+        lambda: resume_processing_queue
+    )
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()

@@ -11,7 +11,11 @@ from app.models.membership import Membership, MembershipRole
 from app.models.organization import Organization
 from app.models.password_reset_token import PasswordResetToken
 from app.models.refresh_token import RefreshToken
-from app.models.resume_document import ResumeDocument, ResumeProcessingStatus
+from app.models.resume_document import (
+    ResumeDocument,
+    ResumeProcessingStatus,
+    can_transition_resume_processing,
+)
 from app.models.user import User
 
 __all__ = [
@@ -33,6 +37,7 @@ __all__ = [
     "ResumeProcessingStatus",
     "User",
     "WorkMode",
+    "can_transition_resume_processing",
 ]
 from app.models.application import Application, ApplicationStage
 from app.models.candidate import Candidate
