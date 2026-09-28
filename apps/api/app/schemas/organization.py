@@ -17,6 +17,15 @@ class OrganizationCreate(SQLModel):
         str,
         StringConstraints(strip_whitespace=True, min_length=1, max_length=100),
     ]
+    slug: Annotated[
+        str | None,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=1,
+            max_length=100,
+            pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$",
+        ),
+    ] = None
     logo_url: AnyHttpUrl | None = None
     website: AnyHttpUrl | None = None
     description: Annotated[
@@ -25,6 +34,11 @@ class OrganizationCreate(SQLModel):
     ] = None
     timezone: str = "UTC"
     currency: str = "USD"
+
+    @field_validator("slug")
+    @classmethod
+    def normalize_slug(cls, value: str | None) -> str | None:
+        return value.strip().lower() if value is not None else None
 
     @field_validator("currency")
     @classmethod
@@ -56,6 +70,7 @@ class UserSummary(SQLModel):
 class OrganizationRead(SQLModel):
     id: UUID
     name: str
+    slug: str
     logo_url: str | None = None
     website: str | None = None
     description: str | None = None

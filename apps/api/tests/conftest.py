@@ -16,6 +16,7 @@ from app.core.security import create_access_token
 from app.db.database import get_session
 from app.main import app
 from app.models import Organization, User
+from app.services.storage_service import LocalPrivateStorage, get_private_storage
 
 
 @pytest.fixture()
@@ -37,8 +38,14 @@ def session(engine) -> Generator[Session]:
 
 
 @pytest.fixture()
-def client(session) -> Generator[TestClient]:
+def private_storage(tmp_path):
+    return LocalPrivateStorage(tmp_path / "private-uploads")
+
+
+@pytest.fixture()
+def client(session, private_storage) -> Generator[TestClient]:
     app.dependency_overrides[get_session] = lambda: session
+    app.dependency_overrides[get_private_storage] = lambda: private_storage
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()

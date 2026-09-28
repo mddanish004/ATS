@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +13,8 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 30
     email_verification_token_expire_hours: int = 24
     password_reset_token_expire_hours: int = 1
+    max_resume_size_bytes: int = 5 * 1024 * 1024
+    private_upload_dir: Path = Path("var/private_uploads")
 
     model_config = SettingsConfigDict(
         env_file=".env",

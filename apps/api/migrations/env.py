@@ -6,12 +6,16 @@ from sqlmodel import SQLModel
 
 from app.core.config import settings
 from app.models import (
+    Application,
+    Candidate,
     EmailVerificationToken,
     Invitation,
+    Job,
     Membership,
     Organization,
     PasswordResetToken,
     RefreshToken,
+    ResumeDocument,
     User,
 )
 
@@ -22,12 +26,16 @@ if config.config_file_name is not None:
 
 # Importing the models registers their tables with SQLModel.metadata.
 _ = (
+    Application,
+    Candidate,
     EmailVerificationToken,
     Invitation,
+    Job,
     Membership,
     Organization,
     PasswordResetToken,
     RefreshToken,
+    ResumeDocument,
     User,
 )
 

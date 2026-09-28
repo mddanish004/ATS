@@ -26,6 +26,7 @@ def test_create_organization_returns_201_and_creates_admin_membership(
     data = response.json()
     organization_id = UUID(data["id"])
     assert data["name"] == "Acme Inc"
+    assert data["slug"] == "acme-inc"
     assert data["website"] == "https://acme.example.com/"
     assert data["description"] == "We build hiring tools"
     assert data["timezone"] == "Europe/Berlin"
@@ -61,6 +62,23 @@ def test_create_organization_applies_documented_defaults(
     assert data["currency"] == "USD"
     assert data["website"] is None
     assert data["description"] is None
+
+
+def test_organization_slug_is_normalized_and_unique(client, auth_headers):
+    first = client.post(
+        "/api/v1/organizations",
+        json={"name": "Acme", "slug": "acme-careers"},
+        headers=auth_headers,
+    )
+    duplicate = client.post(
+        "/api/v1/organizations",
+        json={"name": "Another Acme", "slug": "acme-careers"},
+        headers=auth_headers,
+    )
+
+    assert first.status_code == 201
+    assert first.json()["slug"] == "acme-careers"
+    assert duplicate.status_code == 409
 
 
 def test_organization_endpoints_require_authentication(client, missing_organization_id):

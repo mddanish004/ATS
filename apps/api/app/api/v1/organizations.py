@@ -1,7 +1,9 @@
+import re
+import unicodedata
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
-from sqlmodel import Session
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlmodel import Session, select
 
 from app.api.deps import (
     OrganizationContext,
@@ -34,6 +36,30 @@ router = APIRouter(
 )
 
 
+def _slugify(value: str) -> str:
+    ascii_value = (
+        unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
+    )
+    return re.sub(r"[^a-z0-9]+", "-", ascii_value.lower()).strip("-")
+
+
+def _organization_slug(session: Session, name: str, requested_slug: str | None) -> str:
+    base = requested_slug or _slugify(name) or "organization"
+    candidate = base
+    suffix = 2
+    while session.exec(
+        select(Organization.id).where(Organization.slug == candidate)
+    ).first():
+        if requested_slug is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Organization slug already exists",
+            )
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+    return candidate
+
+
 @router.post(
     "",
     response_model=OrganizationRead,
@@ -46,6 +72,7 @@ def create_organization(
 ) -> Organization:
     organization = Organization(
         name=payload.name,
+        slug=_organization_slug(session, payload.name, payload.slug),
         logo_url=str(payload.logo_url) if payload.logo_url else None,
         website=str(payload.website) if payload.website else None,
         description=payload.description,
