@@ -32,7 +32,10 @@ services:
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: REDIS_URL
-        sync: false # Internal URL of the hireflow-redis Key Value below.
+        fromService:
+          type: keyvalue
+          name: hireflow-redis
+          property: connectionString
       - key: RESUME_STORAGE_BACKEND
         value: r2
       - key: R2_ENDPOINT_URL
@@ -46,17 +49,17 @@ services:
       - key: CORS_ALLOWED_ORIGINS
         sync: false # Empty until a browser frontend exists.
 
-  # ARQ resume worker. Same image; startCommand replaces the image CMD,
-  # so the worker never runs migrations. Needs DATABASE_URL and
-  # JWT_SECRET_KEY because importing the app validates Settings;
-  # REDIS_URL must match the API service.
+  # ARQ resume worker. Same image; dockerCommand replaces the image CMD
+  # (Render forbids startCommand on Docker runtimes), so the worker never
+  # runs migrations. Needs DATABASE_URL and JWT_SECRET_KEY because
+  # importing the app validates Settings; REDIS_URL must match the API.
   - type: worker
     name: hireflow-worker
     runtime: docker
     branch: main
     dockerContext: .
     dockerfilePath: ./apps/api/Dockerfile
-    startCommand: .venv/bin/arq app.workers.resume_worker.WorkerSettings
+    dockerCommand: .venv/bin/arq app.workers.resume_worker.WorkerSettings
     envVars:
       - key: APP_ENV
         value: production
@@ -65,7 +68,10 @@ services:
       - key: JWT_SECRET_KEY
         sync: false # Same value as the API service.
       - key: REDIS_URL
-        sync: false # Same Key Value URL as the API service.
+        fromService:
+          type: keyvalue
+          name: hireflow-redis
+          property: connectionString
       - key: RESUME_STORAGE_BACKEND
         value: r2
       - key: R2_ENDPOINT_URL
@@ -78,5 +84,7 @@ services:
         sync: false
 
   # Managed Redis for the resume queue. Record-only; no source-of-truth data.
+  # Empty allow list = private network only, no public internet exposure.
   - type: keyvalue
     name: hireflow-redis
+    ipAllowList: []
