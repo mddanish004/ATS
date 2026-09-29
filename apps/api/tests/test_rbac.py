@@ -147,7 +147,7 @@ def test_non_admin_roles_cannot_list_members(client, session, organization, user
     )
 
     assert response.status_code == 403
-    assert response.json() == {"detail": "Insufficient permissions"}
+    assert response.json()["error"]["message"] == "Insufficient permissions"
 
 
 def test_client_role_claims_are_ignored(client, session, organization, user):
@@ -174,7 +174,7 @@ def test_memberless_user_cannot_access_organization(client, organization, user):
     )
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "Organization not found"}
+    assert response.json()["error"]["message"] == "Organization not found"
 
 
 def test_member_of_a_cannot_access_b(client, session, user):
@@ -188,7 +188,7 @@ def test_member_of_a_cannot_access_b(client, session, user):
     ):
         response = client.get(url, headers=_headers(user))
         assert response.status_code == 404
-        assert response.json() == {"detail": "Organization not found"}
+        assert response.json()["error"]["message"] == "Organization not found"
         assert "Org B" not in response.text
 
 

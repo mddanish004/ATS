@@ -17,7 +17,7 @@ from sqlmodel import select
 from app.core.config import settings
 from app.models import Membership, MembershipRole, User
 
-GENERIC_401 = {"detail": "Could not validate credentials"}
+GENERIC_401 = "Could not validate credentials"
 
 
 def _mint(
@@ -42,7 +42,7 @@ def test_missing_token_rejected_with_authenticate_header(client, organization):
     response = client.get(f"/api/v1/organizations/{organization.id}")
 
     assert response.status_code == 401
-    assert response.json() == GENERIC_401
+    assert response.json()["error"]["message"] == GENERIC_401
     assert response.headers.get("www-authenticate") == "Bearer"
 
 
@@ -96,7 +96,7 @@ def test_token_failures_share_generic_401(client, organization, user, make_token
     )
 
     assert response.status_code == 401
-    assert response.json() == GENERIC_401
+    assert response.json()["error"]["message"] == GENERIC_401
 
 
 def test_inactive_user_rejected(client, organization, session, user, auth_headers):
@@ -109,7 +109,7 @@ def test_inactive_user_rejected(client, organization, session, user, auth_header
     )
 
     assert response.status_code == 401
-    assert response.json() == GENERIC_401
+    assert response.json()["error"]["message"] == GENERIC_401
 
 
 def test_unverified_user_forbidden_on_protected_resource(client, organization, session):
@@ -130,7 +130,7 @@ def test_unverified_user_forbidden_on_protected_resource(client, organization, s
     )
 
     assert response.status_code == 403
-    assert response.json() == {"detail": "Email verification required"}
+    assert response.json()["error"]["message"] == "Email verification required"
 
 
 def test_non_bearer_scheme_rejected(client, organization, auth_headers):
@@ -142,7 +142,7 @@ def test_non_bearer_scheme_rejected(client, organization, auth_headers):
     )
 
     assert response.status_code == 401
-    assert response.json() == GENERIC_401
+    assert response.json()["error"]["message"] == GENERIC_401
 
 
 def test_cookie_credential_is_not_an_access_credential(
@@ -154,7 +154,7 @@ def test_cookie_credential_is_not_an_access_credential(
     response = client.get(f"/api/v1/organizations/{organization.id}")
 
     assert response.status_code == 401
-    assert response.json() == GENERIC_401
+    assert response.json()["error"]["message"] == GENERIC_401
 
 
 def test_client_identity_cannot_override_authenticated_user(

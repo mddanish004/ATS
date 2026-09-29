@@ -65,7 +65,7 @@ def test_role_forging_via_query_param_has_no_effect(client, session, organizatio
             headers=_headers(user),
         )
         assert response.status_code == 403
-        assert response.json() == {"detail": "Insufficient permissions"}
+        assert response.json()["error"]["message"] == "Insufficient permissions"
 
 
 def test_role_forging_via_body_cannot_elevate_or_smuggle(client, session):

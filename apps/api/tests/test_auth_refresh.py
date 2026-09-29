@@ -102,7 +102,7 @@ def test_refresh_replay_rejected_without_new_session(client, session):
     replay = client.post(REFRESH_URL)
 
     assert replay.status_code == 401
-    assert replay.json()["detail"] == REFRESH_DETAIL
+    assert replay.json()["error"]["message"] == REFRESH_DETAIL
     assert len(session.exec(select(RefreshToken)).all()) == count_after_rotation
     # The rotated-in session remains the only active one.
     active = [r for r in session.exec(select(RefreshToken)).all() if r.revoked_at is None]
@@ -114,7 +114,7 @@ def test_refresh_rejects_unknown_token_without_state_change(client, session):
     response = client.post(REFRESH_URL)
 
     assert response.status_code == 401
-    assert response.json()["detail"] == REFRESH_DETAIL
+    assert response.json()["error"]["message"] == REFRESH_DETAIL
     assert session.exec(select(RefreshToken)).all() == []
 
 
@@ -122,7 +122,7 @@ def test_refresh_rejects_missing_cookie(client, session):
     response = client.post(REFRESH_URL)
 
     assert response.status_code == 401
-    assert response.json()["detail"] == REFRESH_DETAIL
+    assert response.json()["error"]["message"] == REFRESH_DETAIL
     assert session.exec(select(RefreshToken)).all() == []
 
 
@@ -137,7 +137,7 @@ def test_refresh_rejects_expired_token(client, session):
     response = client.post(REFRESH_URL)
 
     assert response.status_code == 401
-    assert response.json()["detail"] == REFRESH_DETAIL
+    assert response.json()["error"]["message"] == REFRESH_DETAIL
     # Expired token mints nothing and links nothing.
     assert len(session.exec(select(RefreshToken)).all()) == 1
     assert _record_for(session, old_raw).replaced_by_id is None
@@ -153,7 +153,7 @@ def test_refresh_rejects_revoked_token(client, session):
     response = client.post(REFRESH_URL)
 
     assert response.status_code == 401
-    assert response.json()["detail"] == REFRESH_DETAIL
+    assert response.json()["error"]["message"] == REFRESH_DETAIL
     assert len(session.exec(select(RefreshToken)).all()) == 1
 
 
@@ -168,5 +168,5 @@ def test_refresh_rejects_inactive_user(client, session):
     response = client.post(REFRESH_URL)
 
     assert response.status_code == 401
-    assert response.json()["detail"] == REFRESH_DETAIL
+    assert response.json()["error"]["message"] == REFRESH_DETAIL
     assert len(session.exec(select(RefreshToken)).all()) == 1

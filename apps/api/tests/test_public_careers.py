@@ -119,7 +119,7 @@ def test_non_public_job_detail_returns_safe_not_found(client, session):
     response = client.get("/api/v1/acme/jobs/secret-job")
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "Public careers resource not found"}
+    assert response.json()["error"]["message"] == "Public careers resource not found"
 
 
 def test_wrong_organization_or_job_slug_returns_not_found(client, session):

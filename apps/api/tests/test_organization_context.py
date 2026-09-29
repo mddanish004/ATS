@@ -172,5 +172,5 @@ def test_member_of_a_cannot_establish_b_context_at_endpoint(
     )
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "Organization not found"}
+    assert response.json()["error"]["message"] == "Organization not found"
     assert "Org B" not in response.text

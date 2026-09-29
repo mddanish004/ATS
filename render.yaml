@@ -1,0 +1,82 @@
+# Render Blueprint — HireFlow Week 1 backend slice.
+#
+# Apply from the Render Dashboard (New → Blueprint → this repo) AFTER the
+# owner has: (1) a Neon PostgreSQL connection string, (2) decided the
+# Render region/plan in the Dashboard, (3) R2 credentials if resume
+# uploads should persist (Render disks are ephemeral, so production
+# uploads require RESUME_STORAGE_BACKEND=r2).
+#
+# This file contains NO secrets. Entries marked `sync: false` prompt for
+# values in the Dashboard at apply time; JWT_SECRET_KEY is auto-generated.
+# Neon stays authoritative — this Blueprint provisions NO database.
+# Region/plan are intentionally left unset so no paid or mis-located
+# resources are provisioned automatically; choose them in the Dashboard
+# (region near the Neon project; free tier is fine for first deploy).
+
+services:
+  # Public FastAPI API. Uses the image CMD (migrate, then serve uvicorn
+  # on $PORT) — correct for a single instance; use a separate release
+  # command before scaling to multiple instances.
+  - type: web
+    name: hireflow-api
+    runtime: docker
+    branch: main
+    dockerContext: .
+    dockerfilePath: ./apps/api/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false # Neon pooler connection string.
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: REDIS_URL
+        sync: false # Internal URL of the hireflow-redis Key Value below.
+      - key: RESUME_STORAGE_BACKEND
+        value: r2
+      - key: R2_ENDPOINT_URL
+        sync: false
+      - key: R2_BUCKET_NAME
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false # Empty until a browser frontend exists.
+
+  # ARQ resume worker. Same image; startCommand replaces the image CMD,
+  # so the worker never runs migrations. Needs DATABASE_URL and
+  # JWT_SECRET_KEY because importing the app validates Settings;
+  # REDIS_URL must match the API service.
+  - type: worker
+    name: hireflow-worker
+    runtime: docker
+    branch: main
+    dockerContext: .
+    dockerfilePath: ./apps/api/Dockerfile
+    startCommand: .venv/bin/arq app.workers.resume_worker.WorkerSettings
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false # Same Neon connection string as the API.
+      - key: JWT_SECRET_KEY
+        sync: false # Same value as the API service.
+      - key: REDIS_URL
+        sync: false # Same Key Value URL as the API service.
+      - key: RESUME_STORAGE_BACKEND
+        value: r2
+      - key: R2_ENDPOINT_URL
+        sync: false
+      - key: R2_BUCKET_NAME
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+
+  # Managed Redis for the resume queue. Record-only; no source-of-truth data.
+  - type: keyvalue
+    name: hireflow-redis

@@ -143,7 +143,7 @@ def test_reset_expired_token_rejected(client, session):
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == RESET_DETAIL
+    assert response.json()["error"]["message"] == RESET_DETAIL
     assert verify_password(PASSWORD, _user(session).password_hash)
     assert _record_for(session, "expired-token").consumed_at is None
 
@@ -165,7 +165,7 @@ def test_reset_unknown_token_rejected_without_oracle(client, session):
     )
 
     assert unknown.status_code == expired.status_code == 400
-    assert unknown.json() == expired.json() == {"detail": RESET_DETAIL}
+    assert unknown.json()["error"]["message"] == expired.json()["error"]["message"] == RESET_DETAIL
 
 
 def test_reset_token_cannot_be_reused(client, session):
@@ -180,7 +180,7 @@ def test_reset_token_cannot_be_reused(client, session):
 
     assert first.status_code == 200
     assert replay.status_code == 400
-    assert replay.json()["detail"] == RESET_DETAIL
+    assert replay.json()["error"]["message"] == RESET_DETAIL
     # Second password never applied.
     assert verify_password(NEW_PASSWORD, _user(session).password_hash)
 

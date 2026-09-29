@@ -102,7 +102,7 @@ def test_verify_expired_token_rejected(client, session):
     response = client.post(VERIFY_URL, json={"token": "expired-token"})
 
     assert response.status_code == 400
-    assert response.json()["detail"] == VERIFY_DETAIL
+    assert response.json()["error"]["message"] == VERIFY_DETAIL
     assert _user(session).is_email_verified is False
 
 
@@ -120,7 +120,8 @@ def test_verify_unknown_token_rejected_without_oracle(client, session):
     expired = client.post(VERIFY_URL, json={"token": "expired-token"})
 
     assert unknown.status_code == expired.status_code == 400
-    assert unknown.json() == expired.json() == {"detail": VERIFY_DETAIL}
+    assert unknown.json()["error"]["message"] == expired.json()["error"]["message"] == VERIFY_DETAIL
+    assert unknown.json()["error"]["code"] == expired.json()["error"]["code"] == "BAD_REQUEST"
 
 
 def test_verify_token_is_single_use(client, session):
@@ -132,7 +133,7 @@ def test_verify_token_is_single_use(client, session):
     replay = client.post(VERIFY_URL, json={"token": raw})
 
     assert replay.status_code == 400
-    assert replay.json()["detail"] == VERIFY_DETAIL
+    assert replay.json()["error"]["message"] == VERIFY_DETAIL
     # Reuse never unsets verification.
     assert _user(session).is_email_verified is True
 
@@ -170,7 +171,7 @@ def test_unverified_user_blocked_from_protected_resources_until_verified(
         "/api/v1/organizations", json={"name": "Acme"}, headers=headers
     )
     assert blocked.status_code == 403
-    assert blocked.json()["detail"] == "Email verification required"
+    assert blocked.json()["error"]["message"] == "Email verification required"
 
     raw = "gate-token"
     _issue(session, _user(session), raw=raw)

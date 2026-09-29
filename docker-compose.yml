@@ -12,6 +12,35 @@ services:
     volumes:
       - redis-data:/data
 
+  # No local PostgreSQL service by design: the project uses Neon.
+  # Set DATABASE_URL (Neon connection string) in apps/api/.env.
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - apps/api/.env
+    environment:
+      # Same Redis for the API and the worker.
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # Liveness only: /ready requires Neon + Redis and would flap
+      # before runtime configuration is complete.
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
   worker:
     image: python:3.14-slim
     working_dir: /app/apps/api

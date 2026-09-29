@@ -123,7 +123,7 @@ def test_create_organization_validates_payload(client, auth_headers, payload):
     response = client.post("/api/v1/organizations", json=payload, headers=auth_headers)
 
     assert response.status_code == 422
-    assert response.json()["detail"]
+    assert response.json()["error"]["message"]
 
 
 def test_get_organization_returns_organization(
@@ -164,7 +164,7 @@ def test_get_organization_returns_404_for_unknown_organization(
     )
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "Organization not found"
+    assert response.json()["error"]["message"] == "Organization not found"
 
 
 def test_get_organization_rejects_invalid_organization_id(client, auth_headers):
@@ -267,4 +267,4 @@ def test_list_memberships_returns_404_for_unknown_organization(
     )
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "Organization not found"
+    assert response.json()["error"]["message"] == "Organization not found"

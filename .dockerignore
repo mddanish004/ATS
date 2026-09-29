@@ -1,0 +1,12 @@
+# Never bake local/dev artifacts or secrets into images.
+apps/api/.env
+**/.env
+.venv/
+**/.venv/
+**/__pycache__/
+**/*.pyc
+**/.mypy_cache/
+**/.pytest_cache/
+**/.ruff_cache/
+var/
+.git/

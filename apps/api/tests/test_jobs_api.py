@@ -131,7 +131,7 @@ def test_user_cannot_retrieve_another_organization_job(client, session):
     )
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "Job not found"}
+    assert response.json()["error"]["message"] == "Job not found"
 
 
 def test_user_lists_only_own_organization_jobs(client, session):

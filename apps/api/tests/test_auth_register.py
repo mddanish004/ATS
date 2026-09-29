@@ -60,7 +60,7 @@ def test_register_rejects_duplicate_email(client, session):
 
     duplicate = client.post(REGISTER_URL, json=VALID_PAYLOAD)
     assert duplicate.status_code == 409
-    assert duplicate.json()["detail"] == "Email already registered"
+    assert duplicate.json()["error"]["message"] == "Email already registered"
 
     case_variant = client.post(
         REGISTER_URL,
@@ -100,7 +100,7 @@ def test_register_validates_payload(client, payload):
     response = client.post(REGISTER_URL, json=payload)
 
     assert response.status_code == 422
-    assert response.json()["detail"]
+    assert response.json()["error"]["message"]
 
 
 @pytest.mark.parametrize(

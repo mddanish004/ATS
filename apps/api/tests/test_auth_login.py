@@ -112,7 +112,7 @@ def test_login_wrong_password_rejected_without_cookie_or_record(client, session)
     response = _login(client, password="WrongPassword123!")
 
     assert response.status_code == 401
-    assert response.json()["detail"] == GENERIC_DETAIL
+    assert response.json()["error"]["message"] == GENERIC_DETAIL
     assert response.cookies.get("refresh_token") is None
     assert session.exec(select(RefreshToken)).all() == []
 
@@ -121,7 +121,7 @@ def test_login_unknown_email_rejected(client, session):
     response = _login(client, email="nobody@example.com")
 
     assert response.status_code == 401
-    assert response.json()["detail"] == GENERIC_DETAIL
+    assert response.json()["error"]["message"] == GENERIC_DETAIL
     assert session.exec(select(RefreshToken)).all() == []
 
 
@@ -132,7 +132,17 @@ def test_login_failure_does_not_reveal_account_existence(client):
     unknown_email = _login(client, email="ghost@example.com")
 
     assert wrong_password.status_code == unknown_email.status_code == 401
-    assert wrong_password.json() == unknown_email.json()
+    # Identical code/message (request IDs legitimately differ per request).
+    assert (
+        wrong_password.json()["error"]["code"]
+        == unknown_email.json()["error"]["code"]
+        == "UNAUTHORIZED"
+    )
+    assert (
+        wrong_password.json()["error"]["message"]
+        == unknown_email.json()["error"]["message"]
+        == GENERIC_DETAIL
+    )
 
 
 def test_login_inactive_user_rejected_with_generic_error(client, session):
@@ -146,7 +156,7 @@ def test_login_inactive_user_rejected_with_generic_error(client, session):
 
     # Same generic 401 so inactive accounts cannot be enumerated.
     assert response.status_code == 401
-    assert response.json()["detail"] == GENERIC_DETAIL
+    assert response.json()["error"]["message"] == GENERIC_DETAIL
     assert session.exec(select(RefreshToken)).all() == []
 
 
